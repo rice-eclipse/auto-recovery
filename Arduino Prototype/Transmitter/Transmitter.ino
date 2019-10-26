@@ -21,6 +21,10 @@
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 Adafruit_MPL3115A2 baro = Adafruit_MPL3115A2();
 
+//joystick variables
+int joypin = 0;  // analog pin used to connect the joystick
+int joy_val;
+
 void setup() 
 {
 pinMode(RFM95_RST, OUTPUT);
@@ -95,6 +99,15 @@ timestamp[12] = 0;
 char number[10] = "#        ";
 itoa(packetnum++, number+1, 10);
 number[9] = 0;
+
+//Joystick
+  joy_val = analogRead(joypin);
+  
+  String joy_message = String(joy_val);
+  char joy_message_chars[50];
+  
+  joy_message.toCharArray(joy_message_chars, sizeof(joy_message_chars));
+  rf95.send((uint8_t *)joy_message_chars, sizeof(joy_message_chars));
 
 
 Serial.print("Sending timestamp: "); Serial.println(timestamp);
