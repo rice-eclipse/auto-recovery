@@ -8,19 +8,23 @@
  
 #include <SPI.h>
 #include <RH_RF95.h>
+#include <Servo.h>
  
 #define RFM95_CS 4
 #define RFM95_RST 5
 #define RFM95_INT 3
  
 // Change to 434.0 or other frequency, must match RX's freq!
-#define RF95_FREQ 915.0
+#define RF95_FREQ 434.0
  
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
  
 // Blinky on receipt
 #define LED 13
+
+Servo servo; //servo object to control servo
+int pos = 90; //initial servo position
  
 void setup() 
 {
@@ -59,6 +63,8 @@ void setup()
   // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then 
   // you can set transmitter powers from 5 to 23 dBm:
   rf95.setTxPower(23, false);
+  servo.attach(9); //attach servo to pin 9
+  //servo.write(pos); //set servo to default center position
 }
  
 void loop()
@@ -84,7 +90,30 @@ void loop()
 //      rf95.send(data, sizeof(data));
 //      rf95.waitPacketSent();
 //      //Serial.print("Sent a reply");
-      digitalWrite(LED, LOW);
+      String dataString = (String)(char*)buf;
+      if (dataString == "LOW") {
+        //Set servo to center position
+        //Wait for servo to move
+        pos = 90;
+        servo.write(pos);
+        delay(150);
+      }
+      else if (dataString.toFloat() > 600) {
+        //increment Servo position
+        //Wait for servo to move
+        //Serial.println(dataString.toFloat());
+        pos++;
+        servo.write(pos);
+        delay(15);
+      }
+      else if (dataString.toFloat() < 400) {
+        //decrement Servo position
+        //Wait for servo to move
+        //Serial.println(dataString.toFloat());
+        pos--;
+        servo.write(pos);
+        delay(15);
+      }
     }
     else
     {

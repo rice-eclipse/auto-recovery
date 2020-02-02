@@ -16,6 +16,7 @@
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 434.0
 #define JOYPIN 1
+#define JOYSWPIN 0
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -24,6 +25,7 @@ void setup()
 {
   pinMode(RFM95_RST, OUTPUT);
   pinMode(8, OUTPUT);
+  pinMode(JOYSWPIN, INPUT);
   digitalWrite(8, LOW);
   digitalWrite(RFM95_RST, HIGH);
 
@@ -65,11 +67,18 @@ void setup()
 
 void loop()
 {
-  float joy_val = analogRead(JOYPIN);
-  String joy_message = String(joy_val);
+  String joy_message;
+  if (digitalRead(JOYSWPIN) == LOW) {
+    joy_message = "LOW";
+    Serial.println(joy_message);
+  }
+  else {
+    float joy_val = analogRead(JOYPIN);
+    joy_message = String(joy_val);
+    Serial.println(joy_val);
+  }
   char joy_message_chars[50];
 
-  Serial.println(joy_val);
   
   joy_message.toCharArray(joy_message_chars, sizeof(joy_message_chars));
   rf95.send((uint8_t *)joy_message_chars, sizeof(joy_message_chars));
