@@ -96,24 +96,22 @@ void loop()
         //Wait for servo to move
         pos = 90;
         servo.write(pos);
-        delay(150);
       }
-      else if (dataString.toFloat() > 600) {
+      else if (dataString.toFloat() > 600 && pos < 180) {
         //increment Servo position
         //Wait for servo to move
         //Serial.println(dataString.toFloat());
-        pos++;
+        pos+=10;
         servo.write(pos);
-        delay(15);
       }
-      else if (dataString.toFloat() < 400) {
+      else if (dataString.toFloat() < 400 && pos > 0) {
         //decrement Servo position
         //Wait for servo to move
         //Serial.println(dataString.toFloat());
-        pos--;
+        pos-=10;
         servo.write(pos);
-        delay(15);
       }
+
     }
     else
     {
