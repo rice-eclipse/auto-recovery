@@ -35,7 +35,7 @@ void setup()
   
   Serial.println("Arduino LoRa TX Servo Test");
   
-  // manual reset
+  // manual reset 
   digitalWrite(RFM95_RST, LOW);
   delay(10);
   digitalWrite(RFM95_RST, HIGH);
