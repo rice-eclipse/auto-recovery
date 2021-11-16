@@ -11,7 +11,7 @@
 Servo myservo;  // create servo object to control a servo
 
 void setup(){
-  myservo.attach(9);  // attaches the servo on pin 9 to the servo object
+  myservo.attach(9, 800, 2200);  // attaches the servo on pin 9 to the servo object
 }
 
 void loop(){
@@ -19,7 +19,7 @@ void loop(){
   delay(1000);          // waits for the servo to get there
   myservo.write(90);    // sets the servo at 90 degree position
   delay(1000);          // waits for the servo to get there
-  myservo.write(180);   // sets the servo at 180 degree position
+  myservo.write(120);   // sets the servo at 180 degree position
   delay(1000);          // waits for the servo to get there
   myservo.write(90);    // sets the servo at 90 degree position
   delay(1000);          // waits for the servo to get there
