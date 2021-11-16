@@ -14,13 +14,11 @@ int servo_pin = 9;
 using namespace Geometry;
 using namespace BLA;
 
-int last_time = millis();
-
 LSM9DS1 imu;
 Matrix<3,3> R_inv = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 Matrix<3,1> pos = {0, 0, 0};
 Matrix<3,1> velocity = {0, 0, 0};
-Matrix<3,1> r_bias = {0,0,0};
+unsigned long last_time = 0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -44,46 +42,31 @@ void setup() {
   Serial.println("Calibrating uwu...");
   imu.calibrate();
   Serial.println("Calibrated owo");
-  //int counter = 0;
-  Matrix<3,1,Array<3,1,int16_t>> rot = {0,0,0};
-  int counter = 0;
-  while(counter < 1000){
-    counter++;
-    delay(10);
-    Matrix<3,1,Array<3,1,int16_t>> reading = {imu.gx, imu.gy, imu.gz};
-    rot = rot + reading;
-  }
-  Matrix<3,1> avg_rot = {imu.calcGyro(rot(0)), imu.calcGyro(rot(1)), imu.calcGyro(rot(2))};
-  avg_rot /= 1000;
-  last_time = millis();
-  r_bias = avg_rot;
-  Serial << r_bias << "\n";
+  last_time = micros();
 }
 
 int counter = 0;
-Matrix<3,1,Array<3,1,int16_t>> sum = {0, 0, 0};
 
-
+const double MUL = -1 * PI / 180000000.0;
 
 void loop() {
   if(imu.gyroAvailable()){
     imu.readGyro();
-    int time_difference = millis() - last_time;
-    last_time = millis();
-    Matrix<3,1,Array<3,1,int16_t>> r = {imu.gx, imu.gy, imu.gz};
-    if(counter % 100 == 0) Serial << "time_difference" << time_difference << "\n";
-    sum += r;
-    counter++;
-  }
-  if(counter % 1000 == 0) {
-    Serial << sum << "\n";
-    sum = sum / 1000;
-    Matrix<3,1> converted = {imu.calcGyro(sum(0)), imu.calcGyro(sum(1)), imu.calcGyro(sum(2))};
-    Serial << converted << "\n";
-    converted = converted - r_bias;
-    Serial << converted << "\n";
-    counter = 0;
-    sum = {0, 0, 0};
+    
+    Matrix<3,1> reading = {imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz)};
+
+    unsigned long now = micros();
+    int elapsed = now - last_time;
+    last_time = now;
+    reading *= MUL * elapsed;
+    Rotation D_inv = exp(reading);
+    R_inv = R_inv * D_inv;
+    Matrix<3, 1>  unit = {0, 1, 0};
+    counter += 1;
+    if(counter % 100 == 0) {
+      Serial << reading << "\n";
+      Serial << R_inv * unit << "\n";
+    }
   }
   if(imu.accelAvailable()){
     imu.readAccel();
