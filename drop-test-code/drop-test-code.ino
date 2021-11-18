@@ -18,7 +18,11 @@ LSM9DS1 imu;
 Matrix<3,3> R_inv = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 Matrix<3,1> pos = {0, 0, 0};
 Matrix<3,1> velocity = {0, 0, 0};
-unsigned long last_time = 0;
+const Matrix<3,1> GRAVITY = {0, 0, -1};
+const Matrix<3,1> UNIT = {0, 1, 0};
+unsigned long last_time_gyro = 0;
+unsigned long last_time_accel = 0;
+unsigned long last_time_loop = 0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -34,42 +38,81 @@ void setup() {
   }
 
   Serial.println("Accumulating data...");
-  for(int i = 0; i < 120; i++){
+  int seconds = 2;
+  for(int i = 0; i < seconds; i++){
     delay(1000);
     Serial.print(i);
-    Serial.println(" / 120 seconds");
+    Serial.print(" / ");
+    Serial.println(seconds);
   }
   Serial.println("Calibrating uwu...");
   imu.calibrate();
   Serial.println("Calibrated owo");
-  last_time = micros();
+  Serial.print("Gyro Bias: ");
+  for(int i = 0; i < 3; i++){
+    Serial.print(imu.gBias[i]);
+    Serial.print(" ");
+  }
+  Serial.print("\n Acceleration Bias: ");
+  for(int i = 0; i < 3; i++){
+    Serial.print(imu.aBias[i]);
+    Serial.print(" ");
+  }
+  Serial.print("\n");
+  last_time_gyro = micros();
+  last_time_accel = micros();
+  last_time_loop = micros();
+
+  imu.setGyroODR(6);
+  imu.setAccelODR(6);
 }
 
 int counter = 0;
 
+const double ONE_MILLIONTH = 1 / 1000000.0;
 const double MUL = -1 * PI / 180000000.0;
+const double G = 9.81;
 
-void loop() {
+void loop() { 
   if(imu.gyroAvailable()){
-    imu.readGyro();
+    //imu.readGyro();
     
-    Matrix<3,1> reading = {imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz)};
+    Matrix<3,1> reading_g = {imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz)};
 
-    unsigned long now = micros();
-    int elapsed = now - last_time;
-    last_time = now;
-    reading *= MUL * elapsed;
-    Rotation D_inv = exp(reading);
+    unsigned long now_g = micros();
+    unsigned long elapsed_g = now_g - last_time_gyro;
+    last_time_gyro = now_g;
+    reading_g *= MUL * elapsed_g;
+    Rotation D_inv = exp(reading_g);
     R_inv = R_inv * D_inv;
-    Matrix<3, 1>  unit = {0, 1, 0};
-    counter += 1;
-    if(counter % 100 == 0) {
-      Serial << reading << "\n";
-      Serial << R_inv * unit << "\n";
-    }
+  }else{
+    Serial.println("Gyro cringe");
   }
+  
   if(imu.accelAvailable()){
-    imu.readAccel();
+    //imu.readAccel();
+    Matrix<3,1> reading_a = {imu.calcAccel(imu.ax), imu.calcAccel(imu.ay), imu.calcAccel(imu.az)};
+    //reading_a = (R_inv * reading_a + GRAVITY) * G;
+    reading_a = (reading_a + GRAVITY) * G;
+    
+    unsigned long now_a = micros();
+    unsigned long elapsed_a = now_a - last_time_accel;;
+    last_time_accel = now_a;
+    velocity += reading_a * elapsed_a * ONE_MILLIONTH;
+    pos += velocity * elapsed_a * ONE_MILLIONTH;
+  }else{
+    Serial.println("Accel cringe");
+  }
+  counter += 1;
+  if(counter % 250 == 0) {
+    unsigned long now = micros();
+    unsigned long elapsed = now - last_time_loop;
+    Serial.println(elapsed);
+    last_time_loop = now;
+    Serial << "Acceleration: " << imu.calcAccel(imu.ax) << " " << imu.calcAccel(imu.ay) << " " << imu.calcAccel(imu.az) << "\n";
+    Serial << "Pointing y: " << R_inv * UNIT << "\n";
+    Serial << "Velocity: " << velocity << "\n";
+    Serial << "Position: " << pos << "\n";
   }
 
   // Adjust the rotation transformation matrix and vector
