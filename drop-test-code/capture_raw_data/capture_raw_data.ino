@@ -9,6 +9,8 @@ unsigned long start_time = 0;
 #define SRAM_FRAMES 56
 #define EEPROM_FRAMES 54
 
+#define BIAS 4
+
 LSM9DS1 imu;
 Servo servo;
 
@@ -26,15 +28,19 @@ void setup() {
     Serial.println("IMU bad");
     while(1);
   }
+  Serial.println("Initialized. Wait 10 sec...");
+  delay(10000);
   Serial.println("Calibrating");
   imu.calibrate();
   Serial.println("Calibrated");
   imu.setGyroODR(1);
   imu.setAccelODR(1);
   imu.setMagODR(3);
+  servo.write(80 + BIAS);
+  Serial.println("Drop in 60 sec...");
+  delay(60000);
+  servo.write(90 + BIAS);
   start_time = micros();
-  Serial.println("Drop in 10 sec...");
-  delay(10000);
 }
 
 void loop() {
@@ -55,10 +61,39 @@ void loop() {
   else {
     buff[ idx - EEPROM_FRAMES ] = frame;
   }
+  if (idx == 25) {
+    servo.write(160 + BIAS);
+  }
+  if (idx == 30) {
+    servo.write(20 + BIAS);
+  }
+  if (idx == 37) {
+    servo.write(160 + BIAS);
+  }
   Serial.println(idx);
+  idx++;
   if (idx == EEPROM_FRAMES + SRAM_FRAMES) {
+    servo.write(90 + BIAS);
     while(1) {
-      Serial.println("--------");
+      Serial.print("aBias: ");
+      for (int j = 0; j < 3; j++) {
+        Serial.print(imu.aBias[j]);
+        Serial.print(" ");
+      }
+      Serial.println("");
+      Serial.print("gBias: ");
+      for (int j = 0; j < 3; j++) {
+        Serial.print(imu.gBias[j]);
+        Serial.print(" ");
+      }
+      Serial.println("");
+      Serial.print("mBias: ");
+      for (int j = 0; j < 3; j++) {
+        Serial.print(imu.mBias[j]);
+        Serial.print(" ");
+      }
+      Serial.println();
+      Serial.println("Data:");
       for (int i = 0; i < EEPROM_FRAMES; i++) {
         Frame frame;
         EEPROM.get(sizeof(Frame) * i, frame);
@@ -76,9 +111,8 @@ void loop() {
         Serial.println();
       }
       Serial.println("--------");
-      delay(30000);
+      delay(15000);
     }
   }
-  idx++;
   delay(400);
 }
