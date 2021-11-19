@@ -46,37 +46,39 @@ void loop() {
   imu.readMag();
   imu.readGyro();
   imu.readAccel();
+  Frame frame = {
+    .imu = {imu.ax, imu.ay, imu.az, imu.gx, imu.gy, imu.gz, imu.mx, imu.my, imu.mz},
+  };
   if (idx < EEPROM_FRAMES) {
-    Frame frame = {
-      .imu = {imu.ax, imu.ay, imu.az, imu.gx, imu.gy, imu.gz, imu.mx, imu.my, imu.mz},
-    };
     EEPROM.put(sizeof(Frame) * idx, frame);
   }
   else {
-    buff[ idx - EEPROM_FRAMES ] = {
-      .imu = {imu.ax, imu.ay, imu.az, imu.gx, imu.gy, imu.gz, imu.mx, imu.my, imu.mz},
-    };  
+    buff[ idx - EEPROM_FRAMES ] = frame;
   }
   Serial.println(idx);
-  idx++;
   if (idx == EEPROM_FRAMES + SRAM_FRAMES) {
-    for (int i = 0; i < EEPROM_FRAMES; i++) {
-      Frame frame;
-      EEPROM.get(sizeof(Frame) * i, frame);
-      for (int j = 0; j < 9; j++){
-        Serial.print(frame.imu[j]);
-        Serial.print(", ");
+    while(1) {
+      Serial.println("--------");
+      for (int i = 0; i < EEPROM_FRAMES; i++) {
+        Frame frame;
+        EEPROM.get(sizeof(Frame) * i, frame);
+        for (int j = 0; j < 9; j++){
+          Serial.print(frame.imu[j]);
+          Serial.print(", ");
+        }
+        Serial.println();
       }
-      Serial.println();
-    }
-    for (int i = 0; i < SRAM_FRAMES; i++) {
-      for (int j = 0; j < 9; j++){
-        Serial.print(buff[i].imu[j]);
-        Serial.print(", ");
+      for (int i = 0; i < SRAM_FRAMES; i++) {
+        for (int j = 0; j < 9; j++){
+          Serial.print(buff[i].imu[j]);
+          Serial.print(", ");
+        }
+        Serial.println();
       }
-      Serial.println();
+      Serial.println("--------");
+      delay(30000);
     }
-    while(1);
   }
+  idx++;
   delay(400);
 }
