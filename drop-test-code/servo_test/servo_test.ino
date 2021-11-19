@@ -3,10 +3,10 @@ const int BIAS = -4;
 Servo servo; 
 void setup() 
 {
-  while (!Serial);
   Serial.begin(9600);
   servo.attach(9); //attach servo to pin 9
-  servo.write(90+BIAS); //set servo to default center position
+  servo.write(90); //set servo to default center position
+  Serial.println("started");
 }
  
 void loop()

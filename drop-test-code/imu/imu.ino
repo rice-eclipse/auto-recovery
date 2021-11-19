@@ -17,18 +17,13 @@ using namespace BLA;
 LSM9DS1 imu;
 Matrix<3,3> R_inv = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 Matrix<3,1> pos = {0, 0, 0};
-Matrix<3,1> velocity = {0, 0, 0};
+Matrix<3,1> vel = {0, 0, 0};
 const Matrix<3,1> GRAVITY = {0, 0, -1};
 const Matrix<3,1> UNIT = {0, 1, 0};
-unsigned long last_time_gyro = 0;
-unsigned long last_time_accel = 0;
-unsigned long last_time_loop = 0;
+unsigned long last_time = 0;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(115200);
-  digitalWrite(10, HIGH);
-  digitalWrite(11, HIGH);
 
   Wire.begin();
 
@@ -36,18 +31,28 @@ void setup() {
     Serial.println("IMU bad");
     while(1);
   }
+  imu.setGyroODR(4);
+  imu.setAccelODR(4);
 
   Serial.println("Accumulating data...");
-  int seconds = 2;
-  for(int i = 0; i < seconds; i++){
-    delay(1000);
+  const int CALIBRATE_SECONDS = 60;
+  const int CALIBRATE_LOOP_DELAY = 100;
+  const int ITERATIONS = CALIBRATE_SECONDS * (1000 / CALIBRATE_LOOP_DELAY);
+  for(int i = 1; i <= ITERATIONS ; i++){
+    if (imu.gyroAvailable() && imu.accelAvailable()) {
+      imu.readGyro();
+      imu.readAccel();
+    }
+    
+    //imu.readMag();
+    delay(CALIBRATE_LOOP_DELAY);
     Serial.print(i);
     Serial.print(" / ");
-    Serial.println(seconds);
+    Serial.println(ITERATIONS );
   }
-  Serial.println("Calibrating uwu...");
-  imu.calibrate();
-  Serial.println("Calibrated owo");
+  Serial.println("Calibrating...");
+  //imu.calibrate(true);
+  Serial.println("Calibrated");
   Serial.print("Gyro Bias: ");
   for(int i = 0; i < 3; i++){
     Serial.print(imu.gBias[i]);
@@ -59,98 +64,75 @@ void setup() {
     Serial.print(" ");
   }
   Serial.print("\n");
-  last_time_gyro = micros();
-  last_time_accel = micros();
-  last_time_loop = micros();
-
-  imu.setGyroODR(6);
-  imu.setAccelODR(6);
+  unsigned long now = micros();
+  last_time = now;
 }
 
 int counter = 0;
-
-const double ONE_MILLIONTH = 1 / 1000000.0;
-const double MUL = -1 * PI / 180000000.0;
+const double ROT_MUL = -1 * PI / 180.0;
 const double G = 9.81;
 
-void loop() { 
-  if(imu.gyroAvailable()){
-    //imu.readGyro();
-    
-    Matrix<3,1> reading_g = {imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz)};
+Matrix<3,1> reading_g = {0, 0, 0};
+Matrix<3,1> reading_m = {0, 0, 0};
+Matrix<3,1> reading_a = {0, 0, 0};
+double heading = 0.0;
 
-    unsigned long now_g = micros();
-    unsigned long elapsed_g = now_g - last_time_gyro;
-    last_time_gyro = now_g;
-    reading_g *= MUL * elapsed_g;
-    Rotation D_inv = exp(reading_g);
-    R_inv = R_inv * D_inv;
-  }else{
-    Serial.println("Gyro cringe");
+const float DECLINATION = -2.12 * PI / 180.0; // Declination https://www.ngdc.noaa.gov/geomag/calculators/magcalc.shtml#declination
+double getHeading(float x, float y, float z) {
+  float heading;
+  if (y == 0)
+    heading = (x < 0) ? PI : 0;
+  else
+    heading = atan2(x, y);
+
+  heading -= DECLINATION;
+
+  if (heading > PI) heading -= (2 * PI);
+  else if (heading < -PI) heading += (2 * PI);
+  
+  return heading;
+}
+
+void loop() {
+  const unsigned long now = micros();
+  const double elapsed = (now - last_time) / 1000000.0;
+  
+  last_time = now;
+  if (!imu.gyroAvailable() || !imu.accelAvailable()) {
+    return;
   }
   
-  if(imu.accelAvailable()){
-    //imu.readAccel();
-    Matrix<3,1> reading_a = {imu.calcAccel(imu.ax), imu.calcAccel(imu.ay), imu.calcAccel(imu.az)};
-    //reading_a = (R_inv * reading_a + GRAVITY) * G;
-    reading_a = (reading_a + GRAVITY) * G;
+  imu.readGyro();
+  imu.readAccel();
+  
+  
+  reading_g = {imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz)};
+  Rotation D_inv = exp(reading_g * elapsed * ROT_MUL);
+  R_inv *= D_inv;
+  
+  reading_a = {imu.calcAccel(imu.ax), imu.calcAccel(imu.ay), imu.calcAccel(imu.az)};
+  vel += (reading_a + R_inv * GRAVITY) * (elapsed * G);
+  pos += vel * elapsed;
+
+  if(imu.magAvailable()) {
+    imu.readMag();
+    float x = imu.calcMag(imu.mx);
+    float y = imu.calcMag(imu.my);
+    float z = imu.calcMag(imu.mz);
+    reading_m = {x, y, z};
+    heading = getHeading(x, y, z);
     
-    unsigned long now_a = micros();
-    unsigned long elapsed_a = now_a - last_time_accel;;
-    last_time_accel = now_a;
-    velocity += reading_a * elapsed_a * ONE_MILLIONTH;
-    pos += velocity * elapsed_a * ONE_MILLIONTH;
-  }else{
-    Serial.println("Accel cringe");
   }
+
   counter += 1;
   if(counter % 250 == 0) {
-    unsigned long now = micros();
-    unsigned long elapsed = now - last_time_loop;
-    Serial.println(elapsed);
-    last_time_loop = now;
-    Serial << "Acceleration: " << imu.calcAccel(imu.ax) << " " << imu.calcAccel(imu.ay) << " " << imu.calcAccel(imu.az) << "\n";
+    Serial.println(1.0 / elapsed);
     Serial << "Pointing y: " << R_inv * UNIT << "\n";
-    Serial << "Velocity: " << velocity << "\n";
+    Serial << "Velocity: " << vel << "\n";
     Serial << "Position: " << pos << "\n";
+    Serial << "Mag: " << reading_m << "\n";
+    Serial << "Acc: " << reading_a << "\n";
+    Serial << "Gyr: " << reading_g << "\n";
+    Serial.println(heading * 180.0 / PI);
   }
-
-  // Adjust the rotation transformation matrix and vector
-  /*
-  int time_difference = millis() - last_time;
-  last_time = millis();
-  Matrix<3,1> r = {imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz)};
-  Matrix<3,1> sum = {0,0,0};
-  for(int i = 0; i < 2000; i++){
-    Matrix<3,1> r = {imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz)};
-    sum = sum + r;
-    delay(1);
-  }
-  sum = sum / 2000;
-  Serial << sum << "\n";
-  */
-  //Serial.print(imu.calcGyro(imu.gx));
-  //Serial.print(" ");
-  //Serial.print(imu.calcGyro(imu.gy));
-  //Serial.print(" ");
-  //Serial.println(imu.calcGyro(imu.gz));
-  //delay(10);
-
-  /*
-  r *= -1 * PI / 180.0 * time_difference / 1000;
-  Rotation D_inv = exp(r);
-  R_inv = R_inv * D_inv;
-  Matrix<3, 1>  unit = {0, 1, 0};
-  delay(100);
-  */
-  
-  // Adjust the velocity and position vectors
-
-  /*
-  Matrix<3,1> acceleration = {imu.calcAccel(imu.ax), imu.calcAccel(imu.ay), imu.calcAccel(imu.az)};
-  acceleration = R_inv * acceleration * G_TO_FT;
-  velocity = velocity + acceleration * time_difference;
-  pos = pos + velocity * time_difference;
-  Serial << pos << "\n";
-  */
 }
