@@ -1,3 +1,4 @@
 *.l#*
 *.b#*
 *.s#*
+/imu_visualizer/node_modules
