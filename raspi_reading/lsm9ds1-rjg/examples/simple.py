@@ -1,5 +1,6 @@
 import sys, os
 import time
+from communicator import Communicator
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lsm9ds1_rjg import Driver, I2CTransport, SPITransport
@@ -13,6 +14,7 @@ class SimpleExample:
         # self.driver = self._create_spi_driver()
         self.driver = self._create_i2c_driver()
         self.driver.configure()
+        self.comm = Communicator('169.254.6.42', 65432)
 
     @staticmethod
     def _create_i2c_driver() -> Driver:
@@ -32,8 +34,9 @@ class SimpleExample:
             while count < 50:
                 ag_data_ready = self.driver.read_ag_status().accelerometer_data_available
                 if ag_data_ready:
-                    self.read_ag()
-                    self.read_magnetometer()
+                    temp,acc,gyro = self.read_ag()
+                    mag = self.read_magnetometer()
+                    self.comm.send_text(f"temp: {temp}, acc: {acc}, gyro: {gyro}, mag: {mag}")
                     count += 1
                 else:
                     time.sleep(0.00001)
@@ -41,12 +44,10 @@ class SimpleExample:
             self.driver.close()
 
     def read_ag(self):
-        temp, acc, gyro = self.driver.read_ag_data()
-        print('Temp:{} Acc:{} Gryo:{}'.format(temp, acc, gyro))
+        return self.driver.read_ag_data()
 
     def read_magnetometer(self):
-        mag = self.driver.read_magnetometer()
-        print('Mag {}'.format(mag))
+        return self.driver.read_magnetometer()
 
 
 if __name__ == '__main__':
