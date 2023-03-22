@@ -7,74 +7,142 @@ import time
 import threading
 import math
 from gpiozero import Servo
+import lzma
 
+PI = math.pi
 
 class GpsPoller(threading.Thread):
 	def __init__(self):
 		threading.Thread.__init__(self)
-		uart = serial.Serial("/dev/ttyS0", baudrate=38400, timeout=30)
 		self.running = True
-		self.last_print = time.monotonic()
+		uart = serial.Serial("/dev/ttyS0", baudrate=38400, timeout=10)
+		self.start_time = time.monotonic()
 		self.gps = adafruit_gps.GPS(uart, debug=False)
 		self.gps.send_command(b'PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
 		self.gps.send_command(b'PMTK220,100')
-		self.current_lon = None
-		self.current_lat = None
-
+		self.current_lon = 0.0
+		self.current_lat = 0.0
+		self.current_alt = 0.0
+		self.ready = False
+		self.file = lzma.open('output-{date:%Y-%m-%d_%H:%M:%S}-gps.txt'.format( date=datetime.datetime.now() ), 'wb')
+		
 	def get_current_value(self):
 		return (self.current_lat, self.current_lon)
 
+	def get_ready(self):
+		return self.ready
+
 	def run(self):
 		try:
+			self.file.write(f"start={self.start_time}\n")
+			while self.running and not self.gps.has_fix:
+				print('Waiting for fix...')
+				time.sleep(0.5)
+			self.ready = True
 			while self.running:
-				self.gps.update()
-				current_time = time.monotonic()
-				if current_time - self.last_print >= 0.1:
-					self.last_print = current_time
-					if not self.gps.has_fix:
-						print('Waiting for fix...')
-						continue
-					
+				if self.gps.update():
 					self.current_lat = self.gps.latitude
 					self.current_lon = self.gps.longitude
-
+					self.current_alt = self.gps.altitude_m
+					
+					self.file.write(f"t={time.monotonic()}, lat={self.current_lat}, lon={self.current_lon}, alt={self.current_alt}\n")
+					
+			self.file.close()
+			
 		except StopIteration:
 			pass
 
+MAG_MX_BIAS = 0.73660
+MAG_MX_NORM = 4.26167
+MAG_MZ_BIAS = 0.36550
+MAG_MZ_NORM = 5.58036
+# don't know the y calibration parameters. don't care.
+MAG_MY_BIAS = 0.0
+MAG_MY_NORM = 1.0
+
+HEADING_BIAS = 0.0 # TODO: figure this out
+
+NO_DATA = "?"
+
+class ImuPoller(threading.Thread):
+	def __init__(self):
+		threading.Thread.__init__(self)
+		self.running = True
+		self.start_time = time.monotonic()
+		self.imu = lsm9ds1.make_i2c(1)
+		self.current_heading = 0.0
+		self.file = lzma.open('output-{date:%Y-%m-%d_%H:%M:%S}-imu.txt'.format( date=datetime.datetime.now() ), 'wb')
+		
+	def get_current_heading(self):
+		return self.current_heading
+		
+	def run(self):
+		try:
+			self.file.write(f"start={self.start_time}\n")
+			mx = my = mz = temp = acc = gyro = None
+			
+			while self.running:
+				mag_data_ready = self.imu.read_magnetometer_status().data_available
+				ag_data_ready = self.imu.read_ag_status()
+				
+				da_mag = mag_data_ready.data_available
+				da_temp, da_gyro, da_acc = (ag_data_ready.temperature_data_available, ag_data_ready.gyroscope_data_available, ag_data_ready.accelerometer_data_available)
+				
+				if da_mag:
+					# in milli gauss
+					mx, my, mz = imu.mag_values()
+					mxc = (mx + MAG_MX_BIAS) * MAG_MX_NORM
+					myc = (my + MAG_MY_BIAS) * MAG_MY_NORM
+					mzc = (mz + MAG_MZ_BIAS) * MAG_MZ_NORM
+					self.current_heading = ImuPoller.mag_to_heading(mxc, myc, mzc)
+				
+				if da_temp or da_gyro or da_acc:
+					# temp is in farenheit lol
+					# acc is in milli g_0
+					# gyro is in milli degree per second
+					temp, acc, gyro = self.imu.read_values()
+
+				if da_temp or da_gyro or da_acc or da_mag:
+				self.file.write(f"t={time.monotonic()}, temp={temp if da_temp else NO_DATA}, acc={acc if da_acc else NO_DATA}, gyro={gyro if da_gyro else NO_DATA}, mag={[mx, my, mz] if da_mag else NO_DATA}\n")
+
+			self.file.close()
+			
+		except StopIteration:
+			pass
+		
+	@staticmethod
+	def mag_to_heading(mx, my, mz):
+		mag = math.sqrt(mx**2 + mz**2)
+		theta = math.acos(mz / mag)
+		phi = math.acos(mx / mag)
+		if phi >= PI/2:
+			return theta
+		else:
+			return 2*PI - theta
+
+target_lat, target_lon = (29.716897, -95.410912) # north of greenbriar lot
+target_lat, target_lon = (29.714922, -95.410879) # south of greenbriar lot
+
+gps = GpsPoller()
+gps.start()
+imu = ImuPoller()
+imu.start()
 servo_l = Servo(23)
 servo_r = Servo(24)
 servo_l.max()
 servo_r.max()
 
-time.sleep(2.0)
+while not gps.get_ready():
+	time.sleep(0.25)
 
 servo_l.mid()
 servo_r.mid()
 
-#target_lat = 29.720558946001436
-#target_lon = -95.40286318177948
-target_lat = 0
-target_lon = 0
-target_lat, target_lon = (29.716897, -95.410912) # north of greenbriar lot
-target_lat, target_lon = (29.714922, -95.410879) # south of greenbriar lot
-#target_lat = 29.72079227210781
-#target_lon = -95.40199533786942
 
 def clockwise_distance(target, current):
 	regular_distance = target - current
 	if regular_distance >= 0: return regular_distance
-	else: return (2 * math.pi) + regular_distance
-
-def mag_to_heading(mx, my, mz):
-	mag = math.sqrt(mx**2 + mz**2)
-	theta = math.acos(mz / mag)
-	phi = math.acos(mx / mag)
-	#theta = math.acos(bound_to_range(mz))
-	#phi = math.acos(bound_to_range(mx))
-	if phi >= math.pi/2:
-		return theta
-	else:
-		return 2*math.pi - theta
+	else: return (2 * PI) + regular_distance
 
 try:
 	gpsp = GpsPoller()
