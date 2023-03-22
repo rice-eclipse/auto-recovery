@@ -123,8 +123,8 @@ class ImuPoller(threading.Thread):
 		else:
 			return 2*PI - theta
 
-target_lat, target_lon = (29.716897, -95.410912) # north of greenbriar lot
-target_lat, target_lon = (29.714922, -95.410879) # south of greenbriar lot
+target_lat_lon = lat_lon_to_rad((29.716897, -95.410912)) # north of greenbriar lot
+target_lat_lon = lat_lon_to_rad((29.714922, -95.410879)) # south of greenbriar lot
 
 gps = GpsPoller()
 gps.start()
@@ -141,20 +141,28 @@ while not gps.get_ready():
 servo_l.mid()
 servo_r.mid()
 
+def lat_lon_to_rad(lat_lon_in_deg):
+	(lat_deg, lon_deg) = lat_lon_in_deg
+	return (math.radians(lat_deg), math.radians(lon_deg))
 
 def clockwise_angle_distance(target, current):
 	regular_distance = (target - current) % (2 * PI)
 	if regular_distance <= PI: return regular_distance
 	else: return regular_distance - (2 * PI)
 	
+def bearing_from_to(from_lat_lon, to_lat_lon):
+	(from_lat, from_lon) = from_lat_lon
+	(to_lat, to_lon) = to_lat_lon
+	return math.atan2(
+		math.sin(to_lon - from_lon) * math.cos(to_lat),
+		math.cos(from_lat) * math.sin(to_lat) - math.sin(from_lat) * math.cos(to_lat) * math.cos(to_lon - from_lon)
+	)
+	
 while True:
-	(lat, lon) = gpsp.get_current_value()
+	from_lat_lon = gps.get_current_value()
 
 	# might not work near the meridian
-	bearing = math.atan2(
-		math.sin(target_lon - lon) * math.cos(target_lat),
-		math.cos(lat) * math.sin(target_lat) − math.sin(lat) * math.cos(target_lat) * cos(target_lon - lon)
-	)
+	bearing = bearing_from_to(from_lat_lon, target_lat_lon)
 	heading = imu.get_current_heading()
 	
 	dif_heading = clockwise_angle_distance(bearing, heading)
