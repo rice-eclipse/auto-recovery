@@ -8,6 +8,7 @@ import threading
 import math
 from gpiozero import Servo
 import lzma
+import datetime
 
 PI = math.pi
 
@@ -34,10 +35,12 @@ class GpsPoller(threading.Thread):
 
 	def run(self):
 		try:
-			self.file.write(f"start={self.start_time}\n")
+			self.file.write(f"start={self.start_time}\n".encode('utf-8'))
 			while self.running and not self.gps.has_fix:
 				print('Waiting for fix...')
 				time.sleep(0.5)
+				self.gps.update()
+			
 			self.ready = True
 			while self.running:
 				if self.gps.update():
@@ -45,22 +48,22 @@ class GpsPoller(threading.Thread):
 					self.current_lon = self.gps.longitude
 					self.current_alt = self.gps.altitude_m
 					
-					self.file.write(f"t={time.monotonic()}, lat={self.current_lat}, lon={self.current_lon}, alt={self.current_alt}\n")
+					self.file.write(f"t={time.monotonic()}, lat={self.current_lat}, lon={self.current_lon}, alt={self.current_alt}\n".encode('utf-8'))
 					
 			self.file.close()
 			
 		except StopIteration:
 			pass
 
-MAG_MX_BIAS = 0.73660
-MAG_MX_NORM = 4.26167
-MAG_MZ_BIAS = 0.36550
-MAG_MZ_NORM = 5.58036
+MAG_MX_BIAS = 0.4266
+MAG_MX_NORM = 0.3409
+MAG_MZ_BIAS = 0.38555
+MAG_MZ_NORM = 0.29705
 # don't know the y calibration parameters. don't care.
 MAG_MY_BIAS = 0.0
 MAG_MY_NORM = 1.0
 
-HEADING_BIAS = 0.0 # TODO: figure this out
+HEADING_BIAS = 35.0 # TODO: figure this out
 
 NO_DATA = "?"
 
@@ -78,11 +81,11 @@ class ImuPoller(threading.Thread):
 		
 	def run(self):
 		try:
-			self.file.write(f"start={self.start_time}\n")
+			self.file.write(f"start={self.start_time}\n".encode('utf-8'))
 			mx = my = mz = temp = acc = gyro = None
 			
 			while self.running:
-				mag_data_ready = self.imu.read_magnetometer_status().data_available
+				mag_data_ready = self.imu.read_magnetometer_status()
 				ag_data_ready = self.imu.read_ag_status()
 				
 				da_mag = mag_data_ready.data_available
@@ -91,10 +94,10 @@ class ImuPoller(threading.Thread):
 				if da_mag:
 					# in milli gauss
 					mx, my, mz = imu.mag_values()
-					mxc = (mx + MAG_MX_BIAS) * MAG_MX_NORM
-					myc = (my + MAG_MY_BIAS) * MAG_MY_NORM
-					mzc = (mz + MAG_MZ_BIAS) * MAG_MZ_NORM
-					self.current_heading = ImuPoller.mag_to_heading(mxc, myc, mzc)
+					mxc = (mx - MAG_MX_BIAS) / MAG_MX_NORM
+					myc = (my - MAG_MY_BIAS) / MAG_MY_NORM
+					mzc = (mz - MAG_MZ_BIAS) / MAG_MZ_NORM
+					self.current_heading = (ImuPoller.mag_to_heading(mxc, myc, mzc) - HEADING_BIAS) % 360.0
 				
 				if da_temp or da_gyro or da_acc:
 					# temp is in farenheit lol
@@ -103,7 +106,7 @@ class ImuPoller(threading.Thread):
 					temp, acc, gyro = self.imu.read_values()
 
 				if da_temp or da_gyro or da_acc or da_mag:
-				self.file.write(f"t={time.monotonic()}, temp={temp if da_temp else NO_DATA}, acc={acc if da_acc else NO_DATA}, gyro={gyro if da_gyro else NO_DATA}, mag={[mx, my, mz] if da_mag else NO_DATA}\n")
+					self.file.write(f"t={time.monotonic()}, temp={temp if da_temp else NO_DATA}, acc={acc if da_acc else NO_DATA}, gyro={gyro if da_gyro else NO_DATA}, mag={mag if da_mag else NO_DATA}\n".encode('utf-8'))
 
 			self.file.close()
 			
@@ -139,11 +142,36 @@ servo_l.mid()
 servo_r.mid()
 
 
-def clockwise_distance(target, current):
-	regular_distance = target - current
-	if regular_distance >= 0: return regular_distance
-	else: return (2 * PI) + regular_distance
+def clockwise_angle_distance(target, current):
+	regular_distance = (target - current) % (2 * PI)
+	if regular_distance <= PI: return regular_distance
+	else: return regular_distance - (2 * PI)
+	
+while True:
+	(lat, lon) = gpsp.get_current_value()
 
+	# might not work near the meridian
+	bearing = math.atan2(
+		math.sin(target_lon - lon) * math.cos(target_lat),
+		math.cos(lat) * math.sin(target_lat) − math.sin(lat) * math.cos(target_lat) * cos(target_lon - lon)
+	)
+	heading = imu.get_current_heading()
+	
+	dif_heading = clockwise_angle_distance(bearing, heading)
+	
+	# dead zone
+	# 0.087 rad = 5 degrees
+	if dif_heading > 0.087:
+		servo_r.value = (PI - dif_heading) * 0.8 / PI
+		servo_l.value = 1.0
+	elif dif_heading < -0.087:
+		servo_l.value = (PI + dif_heading) * 0.8 / PI
+		servo_r.value = 1.0
+	else:
+		servo_l.value = 1.0
+		servo_r.value = 1.0
+	
+'''
 try:
 	gpsp = GpsPoller()
 	gpsp.start()
@@ -226,5 +254,5 @@ except(KeyboardInterrupt, SystemExit):
 	print("\nKilling Thread..")
 	gpsp.running = False
 	gpsp.join()
-
+'''
 print("Done.\nExiting.")
