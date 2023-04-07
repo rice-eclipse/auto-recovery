@@ -25,7 +25,7 @@ class GpsPoller(threading.Thread):
 		self.current_lat = 0.0
 		self.current_alt = 0.0
 		self.ready = False
-		self.file = lzma.open('output-{date:%Y-%m-%d_%H:%M:%S}-gps.txt'.format( date=datetime.datetime.now() ), 'wb')
+		self.file = lzma.open('output-{date:%Y-%m-%d_%H:%M:%S}-gps.txt'.format( date=datetime.datetime.now() ), 'w	b')
 		
 	def get_current_value(self):
 		return (self.current_lat, self.current_lon)
@@ -55,15 +55,15 @@ class GpsPoller(threading.Thread):
 		except StopIteration:
 			pass
 
-MAG_MX_BIAS = 0.4266
-MAG_MX_NORM = 0.3409
-MAG_MZ_BIAS = 0.38555
-MAG_MZ_NORM = 0.29705
+MAG_MX_BIAS = 0.45215
+MAG_MX_NORM = 0.20125
+MAG_MZ_BIAS = 0.40305
+MAG_MZ_NORM = 0.15865
 # don't know the y calibration parameters. don't care.
 MAG_MY_BIAS = 0.0
 MAG_MY_NORM = 1.0
 
-HEADING_BIAS = 35.0 # TODO: figure this out
+HEADING_BIAS = math.radians(260.0)
 
 NO_DATA = "?"
 
@@ -93,11 +93,11 @@ class ImuPoller(threading.Thread):
 				
 				if da_mag:
 					# in milli gauss
-					mx, my, mz = imu.mag_values()
+					mx, my, mz = self.imu.mag_values()
 					mxc = (mx - MAG_MX_BIAS) / MAG_MX_NORM
 					myc = (my - MAG_MY_BIAS) / MAG_MY_NORM
 					mzc = (mz - MAG_MZ_BIAS) / MAG_MZ_NORM
-					self.current_heading = (ImuPoller.mag_to_heading(mxc, myc, mzc) - HEADING_BIAS) % 360.0
+					self.current_heading = (ImuPoller.mag_to_heading(mxc, myc, mzc) - HEADING_BIAS) % (2 * PI)
 				
 				if da_temp or da_gyro or da_acc:
 					# temp is in farenheit lol
@@ -106,6 +106,7 @@ class ImuPoller(threading.Thread):
 					temp, acc, gyro = self.imu.read_values()
 
 				if da_temp or da_gyro or da_acc or da_mag:
+					mag = [mx, my, mz]
 					self.file.write(f"t={time.monotonic()}, temp={temp if da_temp else NO_DATA}, acc={acc if da_acc else NO_DATA}, gyro={gyro if da_gyro else NO_DATA}, mag={mag if da_mag else NO_DATA}\n".encode('utf-8'))
 
 			self.file.close()
@@ -123,8 +124,13 @@ class ImuPoller(threading.Thread):
 		else:
 			return 2*PI - theta
 
+def lat_lon_to_rad(lat_lon_in_deg):
+	(lat_deg, lon_deg) = lat_lon_in_deg
+	return (math.radians(lat_deg), math.radians(lon_deg))
+
+
 target_lat_lon = lat_lon_to_rad((29.716897, -95.410912)) # north of greenbriar lot
-target_lat_lon = lat_lon_to_rad((29.714922, -95.410879)) # south of greenbriar lot
+#target_lat_lon = lat_lon_to_rad((29.714922, -95.410879)) # south of greenbriar lot
 
 gps = GpsPoller()
 gps.start()
@@ -141,9 +147,6 @@ while not gps.get_ready():
 servo_l.mid()
 servo_r.mid()
 
-def lat_lon_to_rad(lat_lon_in_deg):
-	(lat_deg, lon_deg) = lat_lon_in_deg
-	return (math.radians(lat_deg), math.radians(lon_deg))
 
 def clockwise_angle_distance(target, current):
 	regular_distance = (target - current) % (2 * PI)
