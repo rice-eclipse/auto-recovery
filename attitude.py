@@ -5,8 +5,6 @@ from ahrs.filters import Madgwick
 import time
 import lsm9ds1
 
-
-
 class MadgwickAHRS:
     samplePeriod = 1/256
     quaternion = Quaternion(1, 0, 0, 0)

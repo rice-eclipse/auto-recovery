@@ -8,6 +8,7 @@ import threading
 import math
 from gpiozero import Servo
 import datetime
+from mag_calibration import MagFixer
 
 PI = math.pi
 
@@ -51,15 +52,13 @@ class GpsPoller(threading.Thread):
 		finally:
 			self.file.close()
 
-MAG_MX_BIAS = 0.45215
-MAG_MX_NORM = 0.20125
-MAG_MZ_BIAS = 0.40305
-MAG_MZ_NORM = 0.15865
-# don't know the y calibration parameters. don't care.
-MAG_MY_BIAS = 0.0
-MAG_MY_NORM = 1.0
-
-HEADING_BIAS = math.radians(260.0)
+# MAG_MX_BIAS = 0.45215
+# MAG_MX_NORM = 0.20125
+# MAG_MZ_BIAS = 0.40305
+# MAG_MZ_NORM = 0.15865
+# # don't know the y calibration parameters. don't care.
+# MAG_MY_BIAS = 0.0
+# MAG_MY_NORM = 1.0
 
 NO_DATA = "?"
 
@@ -71,6 +70,7 @@ class ImuPoller(threading.Thread):
 		self.imu = lsm9ds1.make_i2c(1)
 		self.current_heading = 0.0
 		self.file = open('output-{date:%Y-%m-%d_%H:%M:%S}-imu.txt'.format( date=datetime.datetime.now() ), 'w', buffering=4096)
+		self.magfixer = MagFixer()
 		
 	def get_current_heading(self):
 		return self.current_heading
@@ -89,11 +89,9 @@ class ImuPoller(threading.Thread):
 				
 				if da_mag:
 					# in milli gauss
-					mx, my, mz = self.imu.mag_values()
-					mxc = (mx - MAG_MX_BIAS) / MAG_MX_NORM
-					myc = (my - MAG_MY_BIAS) / MAG_MY_NORM
-					mzc = (mz - MAG_MZ_BIAS) / MAG_MZ_NORM
-					self.current_heading = (ImuPoller.mag_to_heading(mxc, myc, mzc) - HEADING_BIAS) % (2 * PI)
+					mag_data = self.imu.mag_values()
+					mag_data = self.magfixer.fix_mag(mag_data)
+					self.current_heading = self.magfixer.fixed_mag_to_heading(mag_data) % (2 * PI)
 				
 				if da_temp or da_gyro or da_acc:
 					# temp is in farenheit lol
@@ -108,16 +106,6 @@ class ImuPoller(threading.Thread):
 		finally:
 			self.file.close()
 		
-	@staticmethod
-	def mag_to_heading(mx, my, mz):
-		mag = math.sqrt(mx**2 + mz**2)
-		theta = math.acos(mz / mag)
-		phi = math.acos(mx / mag)
-		if phi >= PI/2:
-			return theta
-		else:
-			return 2*PI - theta
-
 def lat_lon_to_rad(lat_lon_in_deg):
 	(lat_deg, lon_deg) = lat_lon_in_deg
 	return (math.radians(lat_deg), math.radians(lon_deg))
