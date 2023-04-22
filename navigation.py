@@ -4,6 +4,7 @@ import lsm9ds1
 import time
 import threading
 import math
+import gpiozero
 from gpiozero import Servo
 import datetime
 from collections import deque
@@ -177,8 +178,9 @@ try:
 	
 	print("deployed")
 	logfile.write(f"deployed at {time.monotonic()}\n")
-	servo_l = Servo(24)
-	servo_r = Servo(23)
+	pin_factory = gpiozero.pins.pigpio.PiGPIOFactory()
+	servo_l = Servo(24, pin_factory=pin_factory)
+	servo_r = Servo(23, pin_factory=pin_factory)
 	servo_l.mid()
 	servo_r.mid()
 
@@ -200,7 +202,7 @@ try:
 		
 		# dead zone
 		# 0.1745 rad = 10 degrees
-		if dif_heading > 0.35:
+		if dif_heading > 0.1745:
 			servo_r.value = 0.0 - dif_heading * TURN_POWER
 			servo_l.value = 0.0
 		elif dif_heading < -0.35:
