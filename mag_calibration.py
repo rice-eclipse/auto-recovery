@@ -19,7 +19,7 @@ def calibrate_mag(duration_seconds: float, north_fix_seconds: float):
 		if da_mag:
 			reading = imu.mag_values()
 			minimums = np.minimum(minimums, reading)
-			maximums = np.minimum(maximums, reading)
+			maximums = np.maximum(maximums, reading)
 			num_samples += 1
 
 	print(f"OK. Samples: {num_samples}")
@@ -27,44 +27,36 @@ def calibrate_mag(duration_seconds: float, north_fix_seconds: float):
 
 	start_time = time.monotonic()
 
-	headings = []
-	while time.monotonic() - start_time < north_fix_seconds:
+	biases = (minimums + maximums) / 2
+	norms = (maximums - minimums) / 2
+	time.sleep(north_fix_seconds)
+	while True:
 		mag_data_ready = imu.read_magnetometer_status()
 		da_mag = mag_data_ready.data_available
 		
 		if da_mag:
 			reading = imu.mag_values()
-			h = mag_to_heading(reading)
-			headings.append(h)
-
-	return minimums, maximums, np.median(headings)
+			reading = (np.array(reading) - biases) / norms
+			north = mag_to_heading(reading)
+			return biases, norms, north
+	
 	
 SAVE_FILE_NAME = "last-calibration.json"
 
-if __name__ == '__main__':
-	minimums, maximums, north = calibrate_mag(30.0)
-	with open(SAVE_FILE_NAME, 'w') as f:
-		json.dump({
-			"mins": list(minimums),
-			"maxs": list(maximums),
-			"north": north
-		}, f)
 
 class MagFixer:
 	def __init__(self):
 		with open(SAVE_FILE_NAME, 'r') as f:
 			saved = json.load(f)
-		mins = np.array(saved["mins"])
-		maxs = np.array(saved["maxs"])
-		self.biases = (maxs + mins) / 2
-		self.norms = (maxs - mins) / 2
+		self.biases = np.array(saved["biases"])
+		self.norms = np.array(saved["norms"])
 		self.north_offset = saved["north"]
 
 	def fix_mag(self, mag):
-		return (mag - self.biases) / self.norms
+		return (np.array(mag) - self.biases) / self.norms
 	
 	def fixed_mag_to_heading(self, mag):
-		return mag_to_heading(mag) - self.north_offset
+		return (2 * PI) - (mag_to_heading(mag) - self.north_offset) % (2 * PI)
 		
 
 def mag_to_heading(mag):
@@ -76,4 +68,13 @@ def mag_to_heading(mag):
 		return theta
 	else:
 		return 2*PI - theta
+
+if __name__ == '__main__':
+	biases, norms, north = calibrate_mag(30.0, 15.0)
+	with open(SAVE_FILE_NAME, 'w') as f:
+		json.dump({
+			"biases": list(biases),
+			"norms": list(norms),
+			"north": north
+		}, f)
 

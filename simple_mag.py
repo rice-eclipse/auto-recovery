@@ -1,6 +1,8 @@
 import time
+import math
 
 import lsm9ds1
+from mag_calibration import MagFixer
 
 #lsm9ds1.run_interactive_calibration(1)
 class SimpleExample:
@@ -17,6 +19,7 @@ class SimpleExample:
     has new data and then reads all the sensors."""
     def __init__(self):
         self.driver = lsm9ds1.make_i2c(1)
+        self.mf = MagFixer()
         #mc = lsm9ds1.MagCalibration(xmin=-0.3612, xmax=-0.17836000000000002,
         #                            ymin=-0.08750000000000001, ymax=0.07826000000000001,
         #                            heading_offset=95.3491645593403)
@@ -45,8 +48,11 @@ class SimpleExample:
                                              acc[SimpleExample.Z_IND]))
 
     def read_magnetometer(self):
-    	x, y ,z = self.driver.mag_values()
-    	print(f"{x:.2f}    {y:.2f}    {z:.2f}")
+    	m = self.driver.mag_values()
+    	m = self.mf.fix_mag(m)
+    	hdg = math.degrees(self.mf.fixed_mag_to_heading(m))
+    	(x, y, z) = m
+    	print(f"{x:.2f}    {y:.2f}    {z:.2f}	heading={hdg:.2f}")
         #hdg = self.driver.mag_heading()
         #print("Heading: %.2f" % hdg)
 

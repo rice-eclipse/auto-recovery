@@ -87,7 +87,7 @@ class ImuPoller(threading.Thread):
 					# in milli gauss
 					mag = self.imu.mag_values()
 					mag = self.magfixer.fix_mag(mag)
-					self.current_heading = self.magfixer.fixed_mag_to_heading(mag) % (2 * PI)
+					self.current_heading = self.magfixer.fixed_mag_to_heading(mag)
 
 				if da_temp or da_gyro or da_acc:
 					# temp is in ???
