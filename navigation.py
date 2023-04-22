@@ -160,16 +160,12 @@ logfile = open('output-{date:%Y-%m-%d_%H:%M:%S}-main.txt'.format(date=datetime.d
 
 try:
 	logfile.write(f"started at {time.monotonic()}\n")
-	while not gps.has_fix:
-		print("Waiting for GPS...")
-		time.sleep(0.5)
 	
-	print("GPS Ready")
 	logfile.write(f"ready at {time.monotonic()}\n")
 	
 	gravs = deque([-1.0] * 40)
 	gravs_sum = -40.0
-	while gps.get_current_alt() > 2800 or gravs_sum < 0.0:
+	while gravs_sum < 0.0:
 		grav_now = imu.get_current_vertical_acc()
 		gravs.append(grav_now)
 		gravs_sum += grav_now - gravs.popleft()
@@ -183,7 +179,6 @@ try:
 	servo_l.min()
 	servo_r.min()
 
-	prev_distance = distance_between(gps.get_current_value(), target_lat_lon)
 	prev_time = time.monotonic()
 	num_off_course = 0
 	while True:
@@ -192,9 +187,8 @@ try:
 		if imu.get_current_tilt() > 0.35:
 			print("too much tilt. ignoring")
 			continue
-		from_lat_lon = lat_lon_to_rad(gps.get_current_value())
 
-		bearing = bearing_from_to(from_lat_lon, target_lat_lon)
+		bearing = math.radians(90)
 		heading = imu.get_current_heading()
 
 		dif_heading = clockwise_angle_distance(bearing, heading)
@@ -214,22 +208,6 @@ try:
 			servo_r.value = -1.0
 		
 		current_time = time.monotonic()
-		if current_time - prev_time > 5.0:
-			prev_time = current_time
-			current_distance = distance_between(from_lat_lon, target_lat_lon)
-			if current_distance >= prev_distance:
-				num_off_course += 1
-				if num_off_course >= 10:
-					# Suicide mode
-					print("Sprialing down!")
-					logfile.write(f"spiraling down at {time.monotonic()}\n")
-					servo_r.value = -1.0
-					servo_l.value = 1.0
-					while True:
-						time.sleep(1.0)
-			else:
-				num_off_course = 0
-			prev_distance = current_distance
 
 
 finally:
