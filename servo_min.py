@@ -7,7 +7,7 @@ servo_l = Servo(24, pin_factory=pin_factory)
 servo_r = Servo(23, pin_factory=pin_factory)
 servo_l.mid()
 servo_r.mid()
-
+time.sleep(5)
 print("left")
 servo_l.min()
 time.sleep(5)

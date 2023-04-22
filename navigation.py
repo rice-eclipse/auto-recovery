@@ -116,7 +116,7 @@ def lat_lon_to_rad(lat_lon_in_deg):
 	return (math.radians(lat_deg), math.radians(lon_deg))
 
 
-target_lat_lon = lat_lon_to_rad((29.721116, -95.401288)) # middle of OEDK
+target_lat_lon = lat_lon_to_rad((29.222397, -95.096111)) # southsite
 #target_lat_lon = lat_lon_to_rad((29.716897, -95.410912)) # north of greenbriar lot
 #target_lat_lon = lat_lon_to_rad((29.714922, -95.410879)) # south of greenbriar lot
 
@@ -169,7 +169,7 @@ try:
 	
 	gravs = deque([-1.0] * 40)
 	gravs_sum = -40.0
-	while gps.get_current_alt() > 3500 or gravs_sum < 0.0:
+	while gps.get_current_alt() > 2800 or gravs_sum < 0.0:
 		grav_now = imu.get_current_vertical_acc()
 		gravs.append(grav_now)
 		gravs_sum += grav_now - gravs.popleft()
@@ -189,7 +189,7 @@ try:
 	while True:
 	
 		# 0.5 rad = 30 deg
-		if imu.get_current_tilt() > 0.5:
+		if imu.get_current_tilt() > 0.26:
 			print("too much tilt. ignoring")
 			continue
 		from_lat_lon = lat_lon_to_rad(gps.get_current_value())
@@ -201,7 +201,7 @@ try:
 		
 		# dead zone
 		# 0.1745 rad = 10 degrees
-		if dif_heading > 0.1745:
+		if dif_heading > 0.35:
 			# turn right
 			servo_r.value = -1.0
 			servo_l.value = -1.0 + dif_heading * TURN_POWER
@@ -224,7 +224,7 @@ try:
 					print("Sprialing down!")
 					logfile.write(f"spiraling down at {time.monotonic()}\n")
 					servo_r.value = -1.0
-					servo_l.value = -0.6
+					servo_l.value = 1.0
 					while True:
 						time.sleep(1.0)
 			else:
