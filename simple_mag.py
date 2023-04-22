@@ -32,7 +32,7 @@ class SimpleExample:
                 mag_data_ready = self.driver.read_magnetometer_status().data_available
                 if mag_data_ready:
                     self.read_magnetometer()
-                    self.read_ag()
+                    #self.read_ag()
                     count += 1
                 time.sleep(0.05)
         finally:

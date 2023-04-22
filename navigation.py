@@ -86,7 +86,6 @@ class ImuPoller(threading.Thread):
 				da_temp, da_gyro, da_acc = (ag_data_ready.temperature_data_available, ag_data_ready.gyroscope_data_available, ag_data_ready.accelerometer_data_available)
 
 				if da_mag:
-					# in milli gauss
 					mag = self.imu.mag_values()
 					mag = self.magfixer.fix_mag(mag)
 					self.current_heading = self.magfixer.fixed_mag_to_heading(mag)
@@ -153,7 +152,7 @@ def distance_between(point1, point2):
 
 
 
-TURN_POWER = 0.8 / PI
+TURN_POWER = 0.5 / PI
 
 
 
@@ -181,8 +180,8 @@ try:
 	pin_factory = gpiozero.pins.pigpio.PiGPIOFactory()
 	servo_l = Servo(24, pin_factory=pin_factory)
 	servo_r = Servo(23, pin_factory=pin_factory)
-	servo_l.mid()
-	servo_r.mid()
+	servo_l.min()
+	servo_r.min()
 
 	prev_distance = distance_between(gps.get_current_value(), target_lat_lon)
 	prev_time = time.monotonic()
@@ -193,7 +192,7 @@ try:
 		if imu.get_current_tilt() > 0.5:
 			print("too much tilt. ignoring")
 			continue
-		from_lat_lon = gps.get_current_value()
+		from_lat_lon = lat_lon_to_rad(gps.get_current_value())
 
 		bearing = bearing_from_to(from_lat_lon, target_lat_lon)
 		heading = imu.get_current_heading()
@@ -203,14 +202,16 @@ try:
 		# dead zone
 		# 0.1745 rad = 10 degrees
 		if dif_heading > 0.1745:
-			servo_r.value = 0.0 - dif_heading * TURN_POWER
-			servo_l.value = 0.0
+			# turn right
+			servo_r.value = -1.0
+			servo_l.value = -1.0 + dif_heading * TURN_POWER
 		elif dif_heading < -0.35:
-			servo_l.value = 0.0 + dif_heading * TURN_POWER
-			servo_r.value = 0.0
+			# turn left
+			servo_l.value = -1.0
+			servo_r.value = -1.0 - dif_heading * TURN_POWER
 		else:
-			servo_l.value = 0.0
-			servo_r.value = 0.0
+			servo_l.value = -1.0
+			servo_r.value = -1.0
 		
 		current_time = time.monotonic()
 		if current_time - prev_time > 5.0:
@@ -222,8 +223,8 @@ try:
 					# Suicide mode
 					print("Sprialing down!")
 					logfile.write(f"spiraling down at {time.monotonic()}\n")
-
-					servo_l.value = 0.3
+					servo_r.value = -1.0
+					servo_l.value = -0.6
 					while True:
 						time.sleep(1.0)
 			else:
