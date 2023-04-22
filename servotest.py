@@ -1,9 +1,10 @@
 from gpiozero import Servo
 from time import sleep
+import gpiozero
 
-servo_l = Servo(23)
-servo_r = Servo(24)
-print("got here")
+pin_factory = gpiozero.pins.pigpio.PiGPIOFactory()
+servo_l = Servo(24, pin_factory=pin_factory)
+servo_r = Servo(23, pin_factory=pin_factory)
 
 try:
 	while True:
