@@ -116,7 +116,7 @@ def lat_lon_to_rad(lat_lon_in_deg):
 	return (math.radians(lat_deg), math.radians(lon_deg))
 
 
-target_lat_lon = lat_lon_to_rad((29.2223328, -95.094566)) # southsite
+target_lat_lon = lat_lon_to_rad((29.223328, -95.094566)) # southsite
 #target_lat_lon = lat_lon_to_rad((29.716897, -95.410912)) # north of greenbriar lot
 #target_lat_lon = lat_lon_to_rad((29.714922, -95.410879)) # south of greenbriar lot
 
