@@ -6,6 +6,7 @@ import threading
 import math
 from gpiozero import Servo
 import datetime
+from collections import deque
 from mag_calibration import MagFixer
 
 PI = math.pi
@@ -16,7 +17,7 @@ class GpsPoller(threading.Thread):
 	def __init__(self):
 		threading.Thread.__init__(self)
 		self.running = True
-		uart = serial.Serial("/dev/ttyS0", baudrate=38400, timeout=10)
+		uart = serial.Serial("/dev/ttyS0", baudrate=9600, timeout=10)
 		self.start_time = time.monotonic()
 		self.gps = adafruit_gps.GPS(uart, debug=False)
 		self.gps.send_command(b'PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0')
@@ -57,7 +58,7 @@ class ImuPoller(threading.Thread):
 		self.start_time = time.monotonic()
 		self.imu = lsm9ds1.make_i2c(1)
 		self.current_heading = 0.0
-		self.current_acc_x = 0.0
+		self.current_acc_x = -1.0
 		self.current_tilt = 0.0
 		self.file = open('output-{date:%Y-%m-%d_%H:%M:%S}-imu.txt'.format( date=datetime.datetime.now() ), 'w', buffering=4096)
 		self.magfixer = MagFixer()
@@ -94,21 +95,21 @@ class ImuPoller(threading.Thread):
 					# acc is in g_0
 					# gyro is in degree per second
 					temp, acc, gyro = self.imu.read_values()
-					self.current_acc_x = acc[0]
-					self.current_tilt = compute_tilt(acc)
+					if da_acc:
+						self.current_acc_x = acc[1]
+						self.current_tilt = compute_tilt(acc)
 
 				if da_temp or da_gyro or da_acc or da_mag:
 					self.file.write(f"t={time.monotonic()}, temp={temp if da_temp else NO_DATA}, acc={acc if da_acc else NO_DATA}, gyro={gyro if da_gyro else NO_DATA}, mag={mag if da_mag else NO_DATA}\n")
-
 		finally:
 			self.file.close()
 
 def compute_tilt(acc):
-	(ax, ay, az) = acc
+	(az, ax, ay) = acc
 	acc_m = math.sqrt(ax**2 + ay**2 + az**2)
 	if acc_m < 0.001: return 0.0
 	# tilt close to zero == pointing downward
-	return math.cos(ax / acc_m)
+	return math.acos(ax / acc_m)
 
 def lat_lon_to_rad(lat_lon_in_deg):
 	(lat_deg, lon_deg) = lat_lon_in_deg
@@ -123,10 +124,6 @@ gps = GpsPoller()
 gps.start()
 imu = ImuPoller()
 imu.start()
-servo_l = Servo(23)
-servo_r = Servo(24)
-servo_l.min()
-servo_r.min()
 
 def clockwise_angle_distance(target, current):
 	regular_distance = (target - current) % (2 * PI)
@@ -155,10 +152,13 @@ def distance_between(point1, point2):
 
 
 
-TURN_POWER = 0.3 / PI
+TURN_POWER = 0.8 / PI
+
+
+
+logfile = open('output-{date:%Y-%m-%d_%H:%M:%S}-main.txt'.format(date=datetime.datetime.now()), 'w', buffering=16)
 
 try:
-	logfile = open('output-{date:%Y-%m-%d_%H:%M:%S}-main.txt'.format(date=datetime.datetime.now()), 'w', buffering=0)
 	logfile.write(f"started at {time.monotonic()}\n")
 	while not gps.has_fix:
 		print("Waiting for GPS...")
@@ -167,15 +167,21 @@ try:
 	print("GPS Ready")
 	logfile.write(f"ready at {time.monotonic()}\n")
 	
-	servo_l.mid()
-	servo_r.mid()
-	deployed = False
-	while gps.get_current_alt() > 3500 or imu.get_current_vertical_acc() < 0.0:
-		pass
+	gravs = deque([-1.0] * 40)
+	gravs_sum = -40.0
+	while gps.get_current_alt() > 3500 or gravs_sum < 0.0:
+		grav_now = imu.get_current_vertical_acc()
+		gravs.append(grav_now)
+		gravs_sum += grav_now - gravs.popleft()
+		time.sleep(0.05)
 	
 	print("deployed")
 	logfile.write(f"deployed at {time.monotonic()}\n")
-	
+	servo_l = Servo(24)
+	servo_r = Servo(23)
+	servo_l.mid()
+	servo_r.mid()
+
 	prev_distance = distance_between(gps.get_current_value(), target_lat_lon)
 	prev_time = time.monotonic()
 	num_off_course = 0
@@ -183,6 +189,7 @@ try:
 	
 		# 0.5 rad = 30 deg
 		if imu.get_current_tilt() > 0.5:
+			print("too much tilt. ignoring")
 			continue
 		from_lat_lon = gps.get_current_value()
 
@@ -193,15 +200,15 @@ try:
 		
 		# dead zone
 		# 0.1745 rad = 10 degrees
-		if dif_heading > 0.1745:
-			servo_r.value = 0.8 - dif_heading * TURN_POWER
-			servo_l.value = 1.0
-		elif dif_heading < -0.1745:
-			servo_l.value = 0.8 + dif_heading * TURN_POWER
-			servo_r.value = 1.0
+		if dif_heading > 0.35:
+			servo_r.value = 0.0 - dif_heading * TURN_POWER
+			servo_l.value = 0.0
+		elif dif_heading < -0.35:
+			servo_l.value = 0.0 + dif_heading * TURN_POWER
+			servo_r.value = 0.0
 		else:
-			servo_l.value = 1.0
-			servo_r.value = 1.0
+			servo_l.value = 0.0
+			servo_r.value = 0.0
 		
 		current_time = time.monotonic()
 		if current_time - prev_time > 5.0:
@@ -224,7 +231,7 @@ try:
 
 finally:
 	print("Stopping threads.")
-	logfile.write(f"ending at {time.montonic()}")
+	logfile.write(f"ending at {time.monotonic()}")
 	logfile.close()
 	gps.running = False
 	imu.running = False
