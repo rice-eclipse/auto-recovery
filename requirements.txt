@@ -1,0 +1,7 @@
+numpy
+ahrs
+adafruit-circuitpython-gps
+#RPi.GPIO
+pyserial
+smbus2
+gpiozero

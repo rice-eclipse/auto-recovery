@@ -1,3 +1,12 @@
+"""
+Just copy paste stuff from documentation
+This Python script interacts with an LSM9DS1 sensor, 
+which is a 9-axis motion sensor containing 
+an accelerometer, gyroscope, and magnetometer. 
+The code provides a library to interface with 
+this sensor and also includes calibration 
+functionality for the magnetometer.
+"""
 import os
 import time
 import math
@@ -8,6 +17,7 @@ import threading
 from RPi import GPIO
 from smbus2 import SMBus
 
+# Define a constant for maximum invalid magnetometer value
 MAX_INVALID_MAG = 99.0
 
 
@@ -15,6 +25,7 @@ MAX_INVALID_MAG = 99.0
 # Hardware Constants
 #
 # from LSM9DS1_Datasheet.pdf
+## Define hardware register constants for the LSM9DS1 sensor
 class Register:
     """Register constants"""
     WHO_AM_I = 0x0F
@@ -44,7 +55,7 @@ class Register:
     STATUS_REG_M = 0x27
     OUT_X_L_M = 0x28
 
-
+# Class for magnetometer calibration data
 class MagCalibration:
     def __init__(self, xmin=MAX_INVALID_MAG, xmax=-MAX_INVALID_MAG, ymin=MAX_INVALID_MAG, ymax=-MAX_INVALID_MAG,
                  heading_offset=0.0):
@@ -71,8 +82,11 @@ class MagCalibration:
 
 #
 # Status Classes
-#
+
+# Classes for status information from the accelerometer/
+# gyroscope and magnetometer
 class AGStatus:
+    # ... Properties to extract status information ..
     def __init__(self, status):
         self.status = status
 
@@ -106,6 +120,7 @@ class AGStatus:
 
 
 class MagnetometerStatus:
+     # ... Properties to extract status information ...
     def __init__(self, status):
         self.status = status
 
@@ -150,7 +165,9 @@ class MagnetometerStatus:
 #
 # Transport Classes
 #
+# Class for GPIO interrupts
 class GPIOInterrupt:
+    # ... Methods for GPIO setup and interrupt handling ...
     def __init__(self, gpio_pin):
         self.gpio_pin = gpio_pin
         GPIO.setmode(GPIO.BCM)
@@ -177,10 +194,12 @@ class GPIOInterrupt:
             time.sleep(sleep_time)
         return ready
 
-
+# Class for I2C communication with the sensor
 class I2CTransport():
-    I2C_AG_ADDRESS = 0x6A
-    I2C_MAG_ADDRESS = 0x1C
+     # ... Methods for I2C communication ...
+
+    I2C_AG_ADDRESS = 0x6B
+    I2C_MAG_ADDRESS = 0x1E
 
     def __init__(self, port, i2c_address, data_ready_pin=None):
         super().__init__()
@@ -215,8 +234,10 @@ class I2CTransport():
         else:
             raise RuntimeError('I2CTransport needs a GPIO pin to support data_ready().')
 
-
+# Class for SPI communication with the sensor
 class SPITransport():
+    # ... Methods for SPI communication ...
+
     __READ_FLAG = 0x80
     __MAGNETOMETER_READ_FLAG = 0xC0
     __DUMMY = 0xFF
@@ -276,6 +297,8 @@ def make_i2c(i2cbus_no):
 
 
 class lsm9ds1:
+    # ... Initialization and configuration methods ...
+
     AG_ID = 0b01101000
     MAG_ID = 0b00111101
 
